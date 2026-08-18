@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "start": "node backend/src/server.js"
+    "start": "node backend/src/migrate.js && node backend/src/server.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
