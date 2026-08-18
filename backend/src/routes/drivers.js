@@ -7,7 +7,7 @@ const router = Router();
 router.use(auth);
 
 
-// Normalize plate
+// تبدیل فرمت پلاک
 function normalizePlate(value = '') {
   return value
     .trim()
@@ -16,33 +16,85 @@ function normalizePlate(value = '') {
 }
 
 
+// ===============================
+// جستجوی سریع راننده / پلاک
+// ===============================
+router.get('/search', allow('manager','office','employee'), async (req,res)=>{
+
+  const q = (req.query.q || '').trim();
+
+  if(!q){
+    return res.json([]);
+  }
+
+
+  const search = `%${q.toUpperCase()}%`;
+
+
+  const { rows } = await query(
+    `
+    SELECT
+      id,
+      name,
+      truck_number,
+      normalized_plate
+    FROM drivers
+    WHERE archived_at IS NULL
+    AND plate_status='active'
+    AND (
+      UPPER(name) LIKE $1
+      OR normalized_plate LIKE $1
+    )
+    ORDER BY id DESC
+    LIMIT 20
+    `,
+    [search]
+  );
+
+
+  res.json(rows);
+
+});
+
+
+
+// ===============================
 // لیست راننده‌ها
-router.get('/', allow('manager','office'), async (_req, res) => {
-  const { rows } = await query(`
+// ===============================
+router.get('/', allow('manager','office'), async (_req,res)=>{
+
+  const { rows } = await query(
+    `
     SELECT *
     FROM drivers
     WHERE archived_at IS NULL
     ORDER BY id DESC
-  `);
+    `
+  );
 
   res.json(rows);
+
 });
 
 
+
+// ===============================
 // ثبت راننده و پلاک جدید
-router.post('/', allow('manager','office','employee'), async (req, res) => {
+// ===============================
+router.post('/', allow('manager','office','employee'), async(req,res)=>{
+
 
   const {
     name,
     truckNumber,
     phone,
-    language = 'fa'
+    language='fa'
   } = req.body || {};
 
 
-  if (!name || !truckNumber) {
+  if(!name || !truckNumber){
     return res.status(400).json({
-      error: 'NAME_AND_PLATE_REQUIRED'
+      error:'NAME_AND_PLATE_REQUIRED'
     });
   }
 
@@ -50,7 +102,7 @@ router.post('/', allow('manager','office','employee'), async (req, res) => {
   const normalizedPlate = normalizePlate(truckNumber);
 
 
-  // جلوگیری از پلاک تکراری
+
   const exists = await query(
     `
     SELECT id
@@ -63,11 +115,12 @@ router.post('/', allow('manager','office','employee'), async (req, res) => {
   );
 
 
-  if (exists.rows.length) {
+  if(exists.rows.length){
     return res.status(409).json({
-      error: 'PLATE_ALREADY_EXISTS'
+      error:'PLATE_ALREADY_EXISTS'
     });
   }
+
 
 
   const { rows } = await query(
@@ -81,7 +134,8 @@ router.post('/', allow('manager','office','employee'), async (req, res) => {
       language,
       plate_status
     )
-    VALUES($1,$2,$3,$4,$5,'pending')
+    VALUES
+    ($1,$2,$3,$4,$5,'pending')
     RETURNING *
     `,
     [
@@ -95,56 +149,73 @@ router.post('/', allow('manager','office','employee'), async (req, res) => {
 
 
   res.status(201).json(rows[0]);
+
 });
 
 
 
+// ===============================
 // تایید پلاک
+// ===============================
 router.patch('/:id/approve',
-  allow('manager','office'),
-  async (req,res)=>{
+allow('manager','office'),
+async(req,res)=>{
 
-    const { rows } = await query(
-      `
-      UPDATE drivers
-      SET plate_status='active',
-          updated_at=NOW()
-      WHERE id=$1
-      RETURNING *
-      `,
-      [req.params.id]
-    );
 
-    res.json(rows[0]);
+  const { rows } = await query(
+    `
+    UPDATE drivers
+    SET
+      plate_status='active',
+      updated_at=NOW()
+    WHERE id=$1
+    RETURNING *
+    `,
+    [req.params.id]
+  );
+
+
+  res.json(rows[0]);
+
 });
 
 
 
+
+// ===============================
 // رد پلاک
+// ===============================
 router.patch('/:id/reject',
-  allow('manager','office'),
-  async (req,res)=>{
+allow('manager','office'),
+async(req,res)=>{
 
-    const { rows } = await query(
-      `
-      UPDATE drivers
-      SET plate_status='rejected',
-          updated_at=NOW()
-      WHERE id=$1
-      RETURNING *
-      `,
-      [req.params.id]
-    );
 
-    res.json(rows[0]);
+  const { rows } = await query(
+    `
+    UPDATE drivers
+    SET
+      plate_status='rejected',
+      updated_at=NOW()
+    WHERE id=$1
+    RETURNING *
+    `,
+    [req.params.id]
+  );
+
+
+  res.json(rows[0]);
+
 });
 
 
 
+// ===============================
 // ویرایش راننده
+// ===============================
 router.patch('/:id',
-  allow('manager'),
-  async (req,res)=>{
+allow('manager'),
+async(req,res)=>{
+
 
   const {
     name,
@@ -156,9 +227,11 @@ router.patch('/:id',
 
   let normalizedPlate;
 
+
   if(truckNumber){
     normalizedPlate = normalizePlate(truckNumber);
   }
+
 
 
   const { rows } = await query(
@@ -186,25 +259,33 @@ router.patch('/:id',
 
 
   res.json(rows[0]);
+
 });
 
 
 
+// ===============================
 // حذف نرم
+// ===============================
 router.delete('/:id',
-  allow('manager'),
-  async(req,res)=>{
+allow('manager'),
+async(req,res)=>{
+
 
   await query(
     `
     UPDATE drivers
-    SET archived_at=NOW()
+    SET
+      archived_at=NOW(),
+      updated_at=NOW()
     WHERE id=$1
     `,
     [req.params.id]
   );
 
+
   res.status(204).end();
+
 });
 
 
