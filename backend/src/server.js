@@ -25,4 +25,4 @@ app.use((err, _req, res, _next) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(port, ()=>console.log(`VALI API running on :${port}`));
+app.listen(PORT, ()=>console.log(`VALI API running on :${PORT}`));
