@@ -24,5 +24,5 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error:'SERVER_ERROR' });
 });
 
-const port = Number(process.env.PORT || 3001);
+const port = Number(process.env.PORT || 3000);
 app.listen(port, ()=>console.log(`VALI API running on :${port}`));
