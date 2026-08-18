@@ -19,7 +19,11 @@ await pool.query(
     role = EXCLUDED.role,
     updated_at = NOW()
   `,
-  [username.toLowerCase(), 'VAHID VALI', hash]
+  [
+    username.toLowerCase(),
+    'VAHID VALI',
+    hash
+  ]
 );
 
 console.log(`Admin ready: ${username}`);
