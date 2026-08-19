@@ -9,6 +9,7 @@ import companyRoutes from './routes/companies.js';
 import expenseRoutes from './routes/expenses.js';
 import transactionRoutes from './routes/transactions.js';
 import dashboardRoutes from './routes/dashboard.js';
+import reportRoutes from './routes/reports.js';
 
 const app = express();
 
@@ -54,18 +55,18 @@ app.use('/api/transactions', transactionRoutes);
 
 app.use('/api/dashboard', dashboardRoutes);
 
+app.use('/api/reports', reportRoutes);
+
 
 // ==========================
 // Error Handler
 // ==========================
 app.use((err, _req, res, _next) => {
-
   console.error(err);
 
   res.status(500).json({
     error: 'SERVER_ERROR'
   });
-
 });
 
 
