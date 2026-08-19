@@ -7,12 +7,13 @@ const router = Router();
 router.use(auth);
 
 
-// مشاهده هزینه‌ها
-// فقط مدیر و دفتردار
-router.get('/', allow('manager','office'), async (_req, res) => {
+// ==========================
+// لیست هزینه‌ها
+// ==========================
+router.get('/', allow('manager','office'), async (_req,res)=>{
 
   const { rows } = await query(`
-    SELECT 
+    SELECT
       e.*,
       d.name AS driver_name,
       d.truck_number AS plate,
@@ -26,13 +27,19 @@ router.get('/', allow('manager','office'), async (_req, res) => {
     ORDER BY e.created_at DESC
   `);
 
+
   res.json(rows);
+
 });
 
 
+
+
+// ==========================
 // ثبت هزینه
-// همه کاربران اجازه دارند
-router.post('/', allow('manager','office','employee'), async (req,res)=>{
+// ==========================
+router.post('/', allow('manager','office','employee'), async(req,res)=>{
+
 
   const {
     driverId,
@@ -42,54 +49,59 @@ router.post('/', allow('manager','office','employee'), async (req,res)=>{
   } = req.body || {};
 
 
+
   if(!amount || !currency){
+
     return res.status(400).json({
       error:'AMOUNT_AND_CURRENCY_REQUIRED'
     });
+
   }
+
 
 
   if(!['USD','TOMAN'].includes(currency)){
+
     return res.status(400).json({
       error:'INVALID_CURRENCY'
     });
+
+  }
+
+
+
+  if(!driverId){
+
+    return res.status(400).json({
+      error:'DRIVER_REQUIRED'
+    });
+
   }
 
 
-  let driver = null;
 
 
-  if(driverId){
-
-    const result = await query(
-      `
-      SELECT id,plate_status
-      FROM drivers
-      WHERE id=$1
-      AND archived_at IS NULL
-      LIMIT 1
-      `,
-      [driverId]
-    );
+  const driverResult = await query(
+    `
+    SELECT id
+    FROM drivers
+    WHERE id=$1
+    AND archived_at IS NULL
+    LIMIT 1
+    `,
+    [driverId]
+  );
 
 
-    driver=result.rows[0];
 
+  if(!driverResult.rows.length){
 
-    if(!driver){
-      return res.status(404).json({
-        error:'DRIVER_NOT_FOUND'
-      });
-    }
-
-
-    if(driver.plate_status !== 'active'){
-      return res.status(400).json({
-        error:'DRIVER_PLATE_NOT_ACTIVE'
-      });
-    }
+    return res.status(404).json({
+      error:'DRIVER_NOT_FOUND'
+    });
 
   }
+
 
 
 
@@ -110,7 +122,7 @@ router.post('/', allow('manager','office','employee'), async (req,res)=>{
     RETURNING *
     `,
     [
-      driverId || null,
+      driverId,
       description,
       amount,
       currency,
@@ -120,28 +132,40 @@ router.post('/', allow('manager','office','employee'), async (req,res)=>{
   );
 
 
+
   res.status(201).json(rows[0]);
 
 });
 
 
 
+
+
+// ==========================
 // تایید یا رد هزینه
+// ==========================
 router.post('/:id/decision',
 allow('manager','office'),
 async(req,res)=>{
 
-  const {decision}=req.body||{};
+
+  const {
+    decision
+  } = req.body || {};
+
 
 
   if(!['approved','rejected'].includes(decision)){
+
     return res.status(400).json({
       error:'INVALID_DECISION'
     });
+
   }
 
 
-  const {rows}=await query(
+
+  const { rows } = await query(
     `
     UPDATE expenses
     SET
@@ -160,25 +184,31 @@ async(req,res)=>{
   );
 
 
+
   res.json(rows[0]);
 
 });
 
 
 
-// ویرایش فقط مدیر
+
+// ==========================
+// ویرایش هزینه
+// ==========================
 router.patch('/:id',
 allow('manager'),
 async(req,res)=>{
+
 
   const {
     amount,
     currency,
     description
-  }=req.body||{};
+  } = req.body || {};
 
 
-  const {rows}=await query(
+
+  const { rows } = await query(
     `
     UPDATE expenses
     SET
@@ -199,31 +229,39 @@ async(req,res)=>{
   );
 
 
+
   res.json(rows[0]);
 
 });
 
 
 
+
+// ==========================
 // حذف نرم
+// ==========================
 router.delete('/:id',
 allow('manager'),
 async(req,res)=>{
 
+
   await query(
     `
     UPDATE expenses
-    SET archived_at=NOW(),
-    updated_at=NOW()
+    SET
+      archived_at=NOW(),
+      updated_at=NOW()
     WHERE id=$1
     `,
     [req.params.id]
   );
 
 
+
   res.status(204).end();
 
 });
+
 
 
 export default router;
