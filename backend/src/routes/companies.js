@@ -42,30 +42,35 @@ router.get('/:id/account', async (req, res) => {
     FROM companies
     WHERE id=$1
     AND archived_at IS NULL
+    LIMIT 1
     `,
     [companyId]
   );
 
-  if(!company.rows.length){
+  if (!company.rows.length) {
     return res.status(404).json({
-      error:'COMPANY_NOT_FOUND'
+      error: 'COMPANY_NOT_FOUND'
     });
   }
 
   const transactions = await query(
     `
     SELECT
-      id,
-      type,
-      amount,
-      currency,
-      description,
-      occurred_at
-    FROM transactions
-    WHERE entity_type='company'
-    AND entity_id=$1
-    AND archived_at IS NULL
-    ORDER BY occurred_at DESC, id DESC
+      t.id,
+      t.type,
+      t.amount,
+      t.currency,
+      t.description,
+      t.occurred_at,
+      t.created_at,
+      u.full_name AS created_by_name
+    FROM transactions t
+    LEFT JOIN users u
+      ON u.id=t.created_by
+    WHERE t.entity_type='company'
+    AND t.entity_id=$1
+    AND t.archived_at IS NULL
+    ORDER BY t.occurred_at DESC, t.id DESC
     `,
     [companyId]
   );
@@ -85,14 +90,20 @@ router.post('/', async (req, res) => {
 
   const {
     name,
-    phone='',
-    language='fa',
-    note=''
+    phone = '',
+    language = 'fa',
+    note = ''
   } = req.body || {};
 
-  if(!name){
+  if (!name?.trim()) {
     return res.status(400).json({
-      error:'COMPANY_NAME_REQUIRED'
+      error: 'COMPANY_NAME_REQUIRED'
+    });
+  }
+
+  if (!['fa', 'tr'].includes(language)) {
+    return res.status(400).json({
+      error: 'INVALID_LANGUAGE'
     });
   }
 
@@ -109,7 +120,7 @@ router.post('/', async (req, res) => {
     RETURNING *
     `,
     [
-      name,
+      name.trim(),
       phone,
       language,
       note
@@ -133,6 +144,12 @@ router.patch('/:id', async (req, res) => {
     note
   } = req.body || {};
 
+  if (language && !['fa', 'tr'].includes(language)) {
+    return res.status(400).json({
+      error: 'INVALID_LANGUAGE'
+    });
+  }
+
   const { rows } = await query(
     `
     UPDATE companies
@@ -143,16 +160,23 @@ router.patch('/:id', async (req, res) => {
       note=COALESCE($4,note),
       updated_at=NOW()
     WHERE id=$5
+    AND archived_at IS NULL
     RETURNING *
     `,
     [
-      name,
+      name?.trim() || null,
       phone,
       language,
       note,
       req.params.id
     ]
   );
+
+  if (!rows.length) {
+    return res.status(404).json({
+      error: 'COMPANY_NOT_FOUND'
+    });
+  }
 
   res.json(rows[0]);
 
@@ -164,16 +188,24 @@ router.patch('/:id', async (req, res) => {
 // ==========================
 router.delete('/:id', async (req, res) => {
 
-  await query(
+  const { rows } = await query(
     `
     UPDATE companies
     SET
       archived_at=NOW(),
       updated_at=NOW()
     WHERE id=$1
+    AND archived_at IS NULL
+    RETURNING id
     `,
     [req.params.id]
   );
+
+  if (!rows.length) {
+    return res.status(404).json({
+      error: 'COMPANY_NOT_FOUND'
+    });
+  }
 
   res.status(204).end();
 
