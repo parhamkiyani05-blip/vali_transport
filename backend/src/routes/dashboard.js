@@ -36,208 +36,79 @@ function emptySummary() {
 // ========================================
 router.get('/', async (req, res) => {
 
-  const role = req.user.role;
-
+  try {
 
-  // ========================================
-  // کاربر عادی
-  // فقط عملیات خودش
-  // ========================================
-  if (role === 'employee') {
+    const role = req.user.role;
 
-    const myExpenses = await query(
-      `
-      SELECT
-        e.id,
-        e.title AS description,
-        e.amount,
-        e.currency,
-        e.status,
-        e.created_at AS occurred_at,
 
-        d.name AS driver_name,
-        d.truck_number AS plate
+    // ========================================
+    // کاربر عادی
+    // فقط عملیات خودش
+    // ========================================
+    if (role === 'employee') {
 
-      FROM expenses e
+      const myExpenses = await query(
+        `
+        SELECT
+          e.id,
+          e.title AS description,
+          e.amount,
+          e.currency,
+          e.status,
+          e.created_at AS occurred_at,
 
-      LEFT JOIN drivers d
-        ON d.id=e.driver_id
+          d.name AS driver_name,
+          d.truck_number AS plate
 
-      WHERE e.created_by=$1
-      AND e.archived_at IS NULL
+        FROM expenses e
 
-      ORDER BY e.created_at DESC, e.id DESC
+        LEFT JOIN drivers d
+          ON d.id = e.driver_id
 
-      LIMIT 10
-      `,
-      [req.user.id]
-    );
+        WHERE e.created_by = $1
+        AND e.archived_at IS NULL
 
+        ORDER BY
+          e.created_at DESC,
+          e.id DESC
 
-    return res.json({
+        LIMIT 10
+        `,
+        [req.user.id]
+      );
 
-      role: 'employee',
 
-      driverToday: null,
+      return res.json({
 
-      companyToday: null,
+        role: 'employee',
 
-      recent: myExpenses.rows.map(item => ({
-        ...item,
-        type: 'expense',
-        source: 'expense'
-      })),
+        driverToday: null,
 
-      drivers: []
+        companyToday: null,
 
-    });
+        driverTotal: null,
 
-  }
+        companyTotal: null,
 
+        recent: myExpenses.rows.map(item => ({
+          ...item,
+          type: 'expense',
+          source: 'expense'
+        })),
 
+        drivers: []
 
-  // ========================================
-  // خلاصه امروز راننده‌ها
-  // ========================================
+      });
 
-  const driverTransactionTotals = await query(
-    `
-    SELECT
-      currency,
+    }
 
-      COALESCE(
-        SUM(
-          CASE
-            WHEN type='receipt'
-            THEN amount
-            ELSE 0
-          END
-        ),
-        0
-      ) AS receipt,
 
-      COALESCE(
-        SUM(
-          CASE
-            WHEN type='payment'
-            THEN amount
-            ELSE 0
-          END
-        ),
-        0
-      ) AS payment,
 
-      COALESCE(
-        SUM(
-          CASE
-            WHEN type='debt'
-            THEN amount
-            ELSE 0
-          END
-        ),
-        0
-      ) AS debt
+    // ========================================
+    // خلاصه امروز راننده‌ها
+    // ========================================
 
-    FROM transactions
-
-    WHERE archived_at IS NULL
-
-    AND entity_type='driver'
-
-    AND occurred_at >= CURRENT_DATE
-
-    AND occurred_at <
-        CURRENT_DATE + INTERVAL '1 day'
-
-    GROUP BY currency
-    `
-  );
-
-
-  const driverExpenseTotals = await query(
-    `
-    SELECT
-      currency,
-
-      COALESCE(
-        SUM(amount),
-        0
-      ) AS expense
-
-    FROM expenses
-
-    WHERE archived_at IS NULL
-
-    AND status <> 'rejected'
-
-    AND created_at >= CURRENT_DATE
-
-    AND created_at <
-        CURRENT_DATE + INTERVAL '1 day'
-
-    GROUP BY currency
-    `
-  );
-
-
-  const driverToday = emptySummary();
-
-
-  for (const row of driverTransactionTotals.rows) {
-
-    if (!driverToday[row.currency]) continue;
-
-    driverToday[row.currency].receipt =
-      Number(row.receipt || 0);
-
-    driverToday[row.currency].payment =
-      Number(row.payment || 0);
-
-    driverToday[row.currency].debt =
-      Number(row.debt || 0);
-  }
-
-
-  for (const row of driverExpenseTotals.rows) {
-
-    if (!driverToday[row.currency]) continue;
-
-    driverToday[row.currency].expense =
-      Number(row.expense || 0);
-  }
-
-
-  // مطابق منطق حساب راننده:
-  // پرداخت + هزینه + بدهی - دریافت
-  for (const currency of ['USD', 'TOMAN']) {
-
-    driverToday[currency].balance =
-      driverToday[currency].payment
-      +
-      driverToday[currency].expense
-      +
-      driverToday[currency].debt
-      -
-      driverToday[currency].receipt;
-
-  }
-
-
-
-  // ========================================
-  // خلاصه امروز شرکت‌ها
-  // فقط برای مدیر
-  // ========================================
-
-  let companyToday = null;
-
-
-  if (role === 'manager') {
-
-    companyToday = emptySummary();
-
-
-    const companyTransactionTotals = await query(
+    const driverTransactionTotals = await query(
       `
       SELECT
         currency,
@@ -245,7 +116,7 @@ router.get('/', async (req, res) => {
         COALESCE(
           SUM(
             CASE
-              WHEN type='receipt'
+              WHEN type = 'receipt'
               THEN amount
               ELSE 0
             END
@@ -256,7 +127,7 @@ router.get('/', async (req, res) => {
         COALESCE(
           SUM(
             CASE
-              WHEN type='payment'
+              WHEN type = 'payment'
               THEN amount
               ELSE 0
             END
@@ -267,7 +138,7 @@ router.get('/', async (req, res) => {
         COALESCE(
           SUM(
             CASE
-              WHEN type='debt'
+              WHEN type = 'debt'
               THEN amount
               ELSE 0
             END
@@ -279,7 +150,7 @@ router.get('/', async (req, res) => {
 
       WHERE archived_at IS NULL
 
-      AND entity_type='company'
+      AND entity_type = 'driver'
 
       AND occurred_at >= CURRENT_DATE
 
@@ -291,274 +162,644 @@ router.get('/', async (req, res) => {
     );
 
 
-    for (const row of companyTransactionTotals.rows) {
+    const driverExpenseTotals = await query(
+      `
+      SELECT
+        currency,
 
-      if (!companyToday[row.currency]) continue;
+        COALESCE(
+          SUM(amount),
+          0
+        ) AS expense
 
-      companyToday[row.currency].receipt =
+      FROM expenses
+
+      WHERE archived_at IS NULL
+
+      AND status <> 'rejected'
+
+      AND created_at >= CURRENT_DATE
+
+      AND created_at <
+          CURRENT_DATE + INTERVAL '1 day'
+
+      GROUP BY currency
+      `
+    );
+
+
+    const driverToday = emptySummary();
+
+
+    for (const row of driverTransactionTotals.rows) {
+
+      if (!driverToday[row.currency]) continue;
+
+      driverToday[row.currency].receipt =
         Number(row.receipt || 0);
 
-      companyToday[row.currency].payment =
+      driverToday[row.currency].payment =
         Number(row.payment || 0);
 
-      companyToday[row.currency].debt =
+      driverToday[row.currency].debt =
+        Number(row.debt || 0);
+    }
+
+
+    for (const row of driverExpenseTotals.rows) {
+
+      if (!driverToday[row.currency]) continue;
+
+      driverToday[row.currency].expense =
+        Number(row.expense || 0);
+    }
+
+
+    // منطق حساب راننده:
+    // پرداخت + هزینه + بدهی - دریافت
+    for (const currency of ['USD', 'TOMAN']) {
+
+      driverToday[currency].balance =
+        driverToday[currency].payment
+        +
+        driverToday[currency].expense
+        +
+        driverToday[currency].debt
+        -
+        driverToday[currency].receipt;
+
+    }
+
+
+
+    // ========================================
+    // جمع کل حساب تمام راننده‌ها
+    // از ابتدا تا الان
+    // ========================================
+
+    const driverAllTransactionTotals = await query(
+      `
+      SELECT
+        currency,
+
+        COALESCE(
+          SUM(
+            CASE
+              WHEN type = 'receipt'
+              THEN amount
+              ELSE 0
+            END
+          ),
+          0
+        ) AS receipt,
+
+        COALESCE(
+          SUM(
+            CASE
+              WHEN type = 'payment'
+              THEN amount
+              ELSE 0
+            END
+          ),
+          0
+        ) AS payment,
+
+        COALESCE(
+          SUM(
+            CASE
+              WHEN type = 'debt'
+              THEN amount
+              ELSE 0
+            END
+          ),
+          0
+        ) AS debt
+
+      FROM transactions
+
+      WHERE archived_at IS NULL
+
+      AND entity_type = 'driver'
+
+      GROUP BY currency
+      `
+    );
+
+
+    const driverAllExpenseTotals = await query(
+      `
+      SELECT
+        currency,
+
+        COALESCE(
+          SUM(amount),
+          0
+        ) AS expense
+
+      FROM expenses
+
+      WHERE archived_at IS NULL
+
+      AND status <> 'rejected'
+
+      GROUP BY currency
+      `
+    );
+
+
+    const driverTotal = emptySummary();
+
+
+    for (const row of driverAllTransactionTotals.rows) {
+
+      if (!driverTotal[row.currency]) continue;
+
+      driverTotal[row.currency].receipt =
+        Number(row.receipt || 0);
+
+      driverTotal[row.currency].payment =
+        Number(row.payment || 0);
+
+      driverTotal[row.currency].debt =
         Number(row.debt || 0);
 
     }
 
 
-    // مطابق منطق حساب شرکت:
-    // دریافت - پرداخت - بدهی
-    for (const currency of ['USD', 'TOMAN']) {
+    for (const row of driverAllExpenseTotals.rows) {
 
-      companyToday[currency].balance =
-        companyToday[currency].receipt
-        -
-        companyToday[currency].payment
-        -
-        companyToday[currency].debt;
+      if (!driverTotal[row.currency]) continue;
+
+      driverTotal[row.currency].expense =
+        Number(row.expense || 0);
 
     }
 
-  }
+
+    for (const currency of ['USD', 'TOMAN']) {
+
+      driverTotal[currency].balance =
+        driverTotal[currency].payment
+        +
+        driverTotal[currency].expense
+        +
+        driverTotal[currency].debt
+        -
+        driverTotal[currency].receipt;
+
+    }
 
 
 
-  // ========================================
-  // آخرین تراکنش‌ها
-  // ========================================
+    // ========================================
+    // خلاصه امروز شرکت‌ها
+    // فقط مدیر
+    // ========================================
 
-  const recentTransactions = await query(
-    `
-    SELECT
-      t.id,
-      t.type,
-      t.amount,
-      t.currency,
-      t.description,
-      t.occurred_at,
-      t.entity_type,
+    let companyToday = null;
 
-      CASE
 
-        WHEN t.entity_type='driver'
-          THEN d.name
+    if (role === 'manager') {
 
-        WHEN t.entity_type='company'
-          THEN c.name
+      companyToday = emptySummary();
 
-        ELSE ''
 
-      END AS entity_name,
+      const companyTransactionTotals = await query(
+        `
+        SELECT
+          currency,
 
-      d.truck_number AS plate,
+          COALESCE(
+            SUM(
+              CASE
+                WHEN type = 'receipt'
+                THEN amount
+                ELSE 0
+              END
+            ),
+            0
+          ) AS receipt,
 
-      u.full_name AS created_by_name
+          COALESCE(
+            SUM(
+              CASE
+                WHEN type = 'payment'
+                THEN amount
+                ELSE 0
+              END
+            ),
+            0
+          ) AS payment,
 
-    FROM transactions t
+          COALESCE(
+            SUM(
+              CASE
+                WHEN type = 'debt'
+                THEN amount
+                ELSE 0
+              END
+            ),
+            0
+          ) AS debt
 
-    LEFT JOIN drivers d
-      ON t.entity_type='driver'
-      AND d.id=t.entity_id
+        FROM transactions
 
-    LEFT JOIN companies c
-      ON t.entity_type='company'
-      AND c.id=t.entity_id
+        WHERE archived_at IS NULL
 
-    LEFT JOIN users u
-      ON u.id=t.created_by
+        AND entity_type = 'company'
 
-    WHERE t.archived_at IS NULL
+        AND occurred_at >= CURRENT_DATE
 
-    AND (
-      $1::text='manager'
-      OR t.entity_type='driver'
+        AND occurred_at <
+            CURRENT_DATE + INTERVAL '1 day'
+
+        GROUP BY currency
+        `
+      );
+
+
+      for (const row of companyTransactionTotals.rows) {
+
+        if (!companyToday[row.currency]) continue;
+
+        companyToday[row.currency].receipt =
+          Number(row.receipt || 0);
+
+        companyToday[row.currency].payment =
+          Number(row.payment || 0);
+
+        companyToday[row.currency].debt =
+          Number(row.debt || 0);
+
+      }
+
+
+      // منطق حساب شرکت:
+      // دریافت - پرداخت - بدهی
+      for (const currency of ['USD', 'TOMAN']) {
+
+        companyToday[currency].balance =
+          companyToday[currency].receipt
+          -
+          companyToday[currency].payment
+          -
+          companyToday[currency].debt;
+
+      }
+
+    }
+
+
+
+    // ========================================
+    // جمع کل حساب تمام شرکت‌ها
+    // از ابتدا تا الان
+    // فقط مدیر
+    // ========================================
+
+    let companyTotal = null;
+
+
+    if (role === 'manager') {
+
+      companyTotal = emptySummary();
+
+
+      const companyAllTransactionTotals = await query(
+        `
+        SELECT
+          currency,
+
+          COALESCE(
+            SUM(
+              CASE
+                WHEN type = 'receipt'
+                THEN amount
+                ELSE 0
+              END
+            ),
+            0
+          ) AS receipt,
+
+          COALESCE(
+            SUM(
+              CASE
+                WHEN type = 'payment'
+                THEN amount
+                ELSE 0
+              END
+            ),
+            0
+          ) AS payment,
+
+          COALESCE(
+            SUM(
+              CASE
+                WHEN type = 'debt'
+                THEN amount
+                ELSE 0
+              END
+            ),
+            0
+          ) AS debt
+
+        FROM transactions
+
+        WHERE archived_at IS NULL
+
+        AND entity_type = 'company'
+
+        GROUP BY currency
+        `
+      );
+
+
+      for (const row of companyAllTransactionTotals.rows) {
+
+        if (!companyTotal[row.currency]) continue;
+
+        companyTotal[row.currency].receipt =
+          Number(row.receipt || 0);
+
+        companyTotal[row.currency].payment =
+          Number(row.payment || 0);
+
+        companyTotal[row.currency].debt =
+          Number(row.debt || 0);
+
+      }
+
+
+      for (const currency of ['USD', 'TOMAN']) {
+
+        companyTotal[currency].balance =
+          companyTotal[currency].receipt
+          -
+          companyTotal[currency].payment
+          -
+          companyTotal[currency].debt;
+
+      }
+
+    }
+
+
+
+    // ========================================
+    // آخرین تراکنش‌ها
+    // ========================================
+
+    const recentTransactions = await query(
+      `
+      SELECT
+        t.id,
+        t.type,
+        t.amount,
+        t.currency,
+        t.description,
+        t.occurred_at,
+        t.entity_type,
+
+        CASE
+
+          WHEN t.entity_type = 'driver'
+            THEN d.name
+
+          WHEN t.entity_type = 'company'
+            THEN c.name
+
+          ELSE ''
+
+        END AS entity_name,
+
+        d.truck_number AS plate,
+
+        u.full_name AS created_by_name
+
+      FROM transactions t
+
+      LEFT JOIN drivers d
+        ON t.entity_type = 'driver'
+        AND d.id = t.entity_id
+
+      LEFT JOIN companies c
+        ON t.entity_type = 'company'
+        AND c.id = t.entity_id
+
+      LEFT JOIN users u
+        ON u.id = t.created_by
+
+      WHERE t.archived_at IS NULL
+
+      AND (
+        $1::text = 'manager'
+        OR t.entity_type = 'driver'
+      )
+
+      ORDER BY
+        t.occurred_at DESC,
+        t.id DESC
+
+      LIMIT 20
+      `,
+      [role]
+    );
+
+
+
+    // ========================================
+    // آخرین هزینه‌های راننده‌ها
+    // ========================================
+
+    const recentExpenses = await query(
+      `
+      SELECT
+        e.id,
+
+        'expense' AS type,
+
+        e.amount,
+        e.currency,
+
+        e.title AS description,
+
+        e.created_at AS occurred_at,
+
+        'driver' AS entity_type,
+
+        d.name AS entity_name,
+
+        d.truck_number AS plate,
+
+        u.full_name AS created_by_name
+
+      FROM expenses e
+
+      LEFT JOIN drivers d
+        ON d.id = e.driver_id
+
+      LEFT JOIN users u
+        ON u.id = e.created_by
+
+      WHERE e.archived_at IS NULL
+
+      AND e.status <> 'rejected'
+
+      ORDER BY
+        e.created_at DESC,
+        e.id DESC
+
+      LIMIT 20
+      `
+    );
+
+
+
+    const recent = [
+
+      ...recentTransactions.rows.map(item => ({
+        ...item,
+        source: 'transaction'
+      })),
+
+      ...recentExpenses.rows.map(item => ({
+        ...item,
+        source: 'expense'
+      }))
+
+    ]
+
+    .sort(
+      (a, b) =>
+        new Date(b.occurred_at).getTime()
+        -
+        new Date(a.occurred_at).getTime()
     )
 
-    ORDER BY
-      t.occurred_at DESC,
-      t.id DESC
-
-    LIMIT 20
-    `,
-    [role]
-  );
+    .slice(0, 20);
 
 
 
-  // ========================================
-  // آخرین هزینه‌های راننده‌ها
-  // ========================================
+    // ========================================
+    // خلاصه حساب راننده‌ها
+    // ========================================
 
-  const recentExpenses = await query(
-    `
-    SELECT
-      e.id,
+    const drivers = await query(
+      `
+      SELECT
+        d.id,
+        d.name,
+        d.truck_number,
 
-      'expense' AS type,
+        COALESCE(
+          SUM(
+            CASE
+              WHEN t.currency = 'USD'
+              AND t.type = 'payment'
+              THEN t.amount
+              ELSE 0
+            END
+          ),
+          0
+        ) AS payment_usd,
 
-      e.amount,
-      e.currency,
-
-      e.title AS description,
-
-      e.created_at AS occurred_at,
-
-      'driver' AS entity_type,
-
-      d.name AS entity_name,
-
-      d.truck_number AS plate,
-
-      u.full_name AS created_by_name
-
-    FROM expenses e
-
-    LEFT JOIN drivers d
-      ON d.id=e.driver_id
-
-    LEFT JOIN users u
-      ON u.id=e.created_by
-
-    WHERE e.archived_at IS NULL
-
-    AND e.status <> 'rejected'
-
-    ORDER BY
-      e.created_at DESC,
-      e.id DESC
-
-    LIMIT 20
-    `
-  );
+        COALESCE(
+          SUM(
+            CASE
+              WHEN t.currency = 'USD'
+              AND t.type = 'receipt'
+              THEN t.amount
+              ELSE 0
+            END
+          ),
+          0
+        ) AS receipt_usd,
 
 
-
-  const recent = [
-
-    ...recentTransactions.rows.map(item => ({
-      ...item,
-      source: 'transaction'
-    })),
-
-    ...recentExpenses.rows.map(item => ({
-      ...item,
-      source: 'expense'
-    }))
-
-  ]
-
-  .sort(
-    (a, b) =>
-      new Date(b.occurred_at).getTime()
-      -
-      new Date(a.occurred_at).getTime()
-  )
-
-  .slice(0, 20);
+        COALESCE(
+          SUM(
+            CASE
+              WHEN t.currency = 'TOMAN'
+              AND t.type = 'payment'
+              THEN t.amount
+              ELSE 0
+            END
+          ),
+          0
+        ) AS payment_toman,
 
 
+        COALESCE(
+          SUM(
+            CASE
+              WHEN t.currency = 'TOMAN'
+              AND t.type = 'receipt'
+              THEN t.amount
+              ELSE 0
+            END
+          ),
+          0
+        ) AS receipt_toman
 
-  // ========================================
-  // خلاصه حساب راننده‌ها
-  // ========================================
+      FROM drivers d
 
-  const drivers = await query(
-    `
-    SELECT
-      d.id,
-      d.name,
-      d.truck_number,
+      LEFT JOIN transactions t
+        ON t.entity_type = 'driver'
+        AND t.entity_id = d.id
+        AND t.archived_at IS NULL
 
-      COALESCE(
-        SUM(
-          CASE
-            WHEN t.currency='USD'
-            AND t.type='payment'
-            THEN t.amount
-            ELSE 0
-          END
-        ),
-        0
-      ) AS payment_usd,
+      WHERE d.archived_at IS NULL
 
-      COALESCE(
-        SUM(
-          CASE
-            WHEN t.currency='USD'
-            AND t.type='receipt'
-            THEN t.amount
-            ELSE 0
-          END
-        ),
-        0
-      ) AS receipt_usd,
+      GROUP BY
+        d.id,
+        d.name,
+        d.truck_number
 
+      ORDER BY d.id DESC
 
-      COALESCE(
-        SUM(
-          CASE
-            WHEN t.currency='TOMAN'
-            AND t.type='payment'
-            THEN t.amount
-            ELSE 0
-          END
-        ),
-        0
-      ) AS payment_toman,
-
-
-      COALESCE(
-        SUM(
-          CASE
-            WHEN t.currency='TOMAN'
-            AND t.type='receipt'
-            THEN t.amount
-            ELSE 0
-          END
-        ),
-        0
-      ) AS receipt_toman
-
-    FROM drivers d
-
-    LEFT JOIN transactions t
-      ON t.entity_type='driver'
-      AND t.entity_id=d.id
-      AND t.archived_at IS NULL
-
-    WHERE d.archived_at IS NULL
-
-    GROUP BY
-      d.id,
-      d.name,
-      d.truck_number
-
-    ORDER BY d.id DESC
-
-    LIMIT 20
-    `
-  );
+      LIMIT 20
+      `
+    );
 
 
 
-  // ========================================
-  // خروجی نهایی
-  // ========================================
+    // ========================================
+    // خروجی نهایی
+    // ========================================
 
-  res.json({
+    res.json({
 
-    role,
+      role,
 
-    driverToday,
+      driverToday,
 
-    companyToday,
+      companyToday,
 
-    recent,
+      // جدید:
+      driverTotal,
 
-    drivers: drivers.rows
+      // جدید:
+      companyTotal,
 
-  });
+      recent,
+
+      drivers: drivers.rows
+
+    });
+
+
+  } catch (error) {
+
+    console.error(
+      'Dashboard error:',
+      error
+    );
+
+    res.status(500).json({
+      error: 'خطا در دریافت اطلاعات داشبورد'
+    });
+
+  }
 
 });
 
